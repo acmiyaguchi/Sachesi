@@ -23,6 +23,8 @@
 #include <QDebug>
 #include <QMessageBox>
 #include <QNetworkInterface>
+#include <QSslConfiguration>
+#include <QSslSocket>
 
 InstallNet::InstallNet( QObject* parent) : QObject(parent),
     device(nullptr), manager(nullptr), reply(nullptr), cookieJar(nullptr),
@@ -1606,7 +1608,19 @@ void InstallNet::exportInstalled()
 //Network Manager
 QNetworkReply* SslNetworkAccessManager::createRequest(Operation op, const QNetworkRequest& req, QIODevice* outgoingData)
 {
-    QNetworkReply* reply = QNetworkAccessManager::createRequest(op, req, outgoingData);
+    // BB10 / PlayBook devices speak TLSv1 with AES256-SHA (a SHA-1 MAC
+    // cipher). Modern Qt5 + OpenSSL 3.x defaults reject both: Qt sets
+    // SSL_CTX_set_min_proto_version(TLS1_2_VERSION) for QSsl::SecureProtocols,
+    // and OpenSSL ships SECLEVEL=2 which forbids SHA-1 in TLS. Force the
+    // per-request config to TlsV1_0OrLater so the handshake can complete.
+    // The cipher side still requires OPENSSL_CONF with @SECLEVEL=0 at the
+    // process level — see deployment notes.
+    QNetworkRequest mutableReq = req;
+    QSslConfiguration sslConf = mutableReq.sslConfiguration();
+    sslConf.setProtocol(QSsl::TlsV1_0OrLater);
+    sslConf.setPeerVerifyMode(QSslSocket::VerifyNone);
+    mutableReq.setSslConfiguration(sslConf);
+    QNetworkReply* reply = QNetworkAccessManager::createRequest(op, mutableReq, outgoingData);
     reply->ignoreSslErrors();
     return reply;
 }
