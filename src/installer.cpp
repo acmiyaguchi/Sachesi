@@ -694,7 +694,7 @@ void InstallNet::login()
         QNetworkRequest request;
         request.setHeader(QNetworkRequest::KnownHeaders::UserAgentHeader, "QNXWebClient/1.0");
         request.setAttribute(QNetworkRequest::CustomVerbAttribute, ip_addr);
-        request.setUrl(QUrl("http://"+ip_addr+"/cgi-bin/discovery.cgi"));
+        request.setUrl(QUrl("https://"+ip_addr+"/cgi-bin/discovery.cgi"));
         QNetworkReply* replyTemp = manager->get(request);
         connect(replyTemp, SIGNAL(error(QNetworkReply::NetworkError)),
                 this, SLOT(restoreError(QNetworkReply::NetworkError)));
