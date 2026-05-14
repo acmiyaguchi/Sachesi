@@ -694,7 +694,13 @@ void InstallNet::login()
         QNetworkRequest request;
         request.setHeader(QNetworkRequest::KnownHeaders::UserAgentHeader, "QNXWebClient/1.0");
         request.setAttribute(QNetworkRequest::CustomVerbAttribute, ip_addr);
-        request.setUrl(QUrl("https://"+ip_addr+"/cgi-bin/discovery.cgi"));
+        // BB10 10.3.x removed /cgi-bin/discovery.cgi entirely; the server
+        // closes the TLS connection on that path without sending a response.
+        // /cgi-bin/login.cgi is still live and returns an AuthChallenge XML
+        // we can treat as "valid BB10 device" — see the AuthChallenge branch
+        // in discoveryReply() below. login.cgi is queried again with a
+        // request_version arg later for the real password handshake.
+        request.setUrl(QUrl("https://"+ip_addr+"/cgi-bin/login.cgi"));
         QNetworkReply* replyTemp = manager->get(request);
         connect(replyTemp, SIGNAL(error(QNetworkReply::NetworkError)),
                 this, SLOT(restoreError(QNetworkReply::NetworkError)));
@@ -762,6 +768,23 @@ void InstallNet::discoveryReply() {
         // Don't even attempt because it will kick us
         if (!device->setupComplete)
             checkLogin();
+    } else if (xml.name() == "AuthChallenge") {
+        // BB10 (10.3.x+): /cgi-bin/discovery.cgi is gone, login.cgi gives
+        // us an AuthChallenge XML directly. No DeviceCharacteristics block
+        // is returned — PIN/OS/model are populated later, post-auth, via
+        // other endpoints. For now just flip state to 1 so the QML password
+        // panel becomes active and the existing login flow can proceed.
+        setIp(ip_addr);
+        setState(1);
+        if (device != nullptr)
+            device->deleteLater();
+        device = new DeviceInfo();
+        device->setProtocol(3);
+        device->setName("BlackBerry 10");
+        device->setSetupComplete(true);
+        emit deviceChanged();
+        setNewLine(QString("Connected to BlackBerry 10 at %1.").arg(_ip));
+        setCompleted(false);
     }
     sender()->deleteLater();
 }
