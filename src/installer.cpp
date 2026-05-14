@@ -25,6 +25,8 @@
 #include <QNetworkInterface>
 #include <QSslConfiguration>
 #include <QSslSocket>
+#include <QNetworkCookie>
+#include <QNetworkCookieJar>
 
 InstallNet::InstallNet( QObject* parent) : QObject(parent),
     device(nullptr), manager(nullptr), reply(nullptr), cookieJar(nullptr),
@@ -866,11 +868,29 @@ void InstallNet::determineDeviceFamily()
     }
 }
 
+// Pull Set-Cookie headers out of a reply and insert each into the
+// manager's cookieJar so they get sent on subsequent same-host
+// requests. Needed because Qt 5.15 skips cookie processing on replies
+// that errored mid-stream (BB10 closes TLS without close_notify).
+void InstallNet::harvestCookies(QNetworkReply* r)
+{
+    if (!r || !cookieJar)
+        return;
+    QUrl url = r->url();
+    foreach (const QNetworkReply::RawHeaderPair& h, r->rawHeaderPairs()) {
+        if (h.first.toLower() != "set-cookie")
+            continue;
+        QList<QNetworkCookie> cookies = QNetworkCookie::parseCookies(h.second);
+        cookieJar->setCookiesFromUrl(cookies, url);
+    }
+}
+
 void InstallNet::restoreReply()
 {
     if (reply == nullptr)
         return;
 
+    harvestCookies(reply);
     QByteArray data = reply->readAll();
 #if DEBUG_LOG
     for (int s = 0; s < data.size(); s+=3500) qDebug() << "Message:\n" << QString(data).simplified().mid(s, 3500);

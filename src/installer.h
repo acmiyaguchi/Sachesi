@@ -211,6 +211,7 @@ private:
     QNetworkRequest setData(QString page, QString contentType);
     QNetworkReply* postQuery(QString page, QString contentType, const QUrlQuery& query);
     QNetworkReply* getQuery(QString page, QString contentType);
+    void harvestCookies(QNetworkReply* reply);
     BarInfo checkInstallableInfo(QString name, bool blitz);
     BarInfo blitzCheck(QString name);
     void install();
