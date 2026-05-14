@@ -804,8 +804,11 @@ bool InstallNet::checkLogin() {
         // a prior session — the new challenge needs a clean jar so the
         // device issues a fresh loginsession + session_id that the next
         // challenge_data POST can bind to.
-        if (cookieJar)
-            cookieJar->setAllCookies(QList<QNetworkCookie>());
+        // setAllCookies is protected on QNetworkCookieJar, so we
+        // can't clear in place. Swap the jar wholesale.
+        cookieJar->deleteLater();
+        cookieJar = new QNetworkCookieJar(this);
+        manager->setCookieJar(cookieJar);
         getQuery(QString("login.cgi?request_version=%1").arg(QString::number(device->protocol)), "x-www-form-urlencoded");
         return false;
     }
