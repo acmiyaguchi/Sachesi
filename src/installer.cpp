@@ -1525,7 +1525,15 @@ void InstallNet::resetVars()
 
 void InstallNet::restoreError(QNetworkReply::NetworkError error)
 {
-    if (error == 5 || error == 99) // On purpose or unreachable
+    // 5 = OperationCanceledError, 99 = UnknownNetworkError
+    // 2 = RemoteHostClosedError. BB10's on-device webserver closes its
+    // TLS connections without sending close_notify after every response,
+    // which Qt's SSL backend surfaces as error 2 even when the full HTTP
+    // body has already been received and buffered. Letting the default
+    // path through would call resetVars() below and drop the buffered
+    // response before finished() fires — auth never completes. Skip the
+    // reset; finished() will still deliver the bytes to restoreReply().
+    if (error == 5 || error == 99 || error == 2)
         return;
 
     // This is only if it's a discovery pong. Otherwise it will be empty string.
