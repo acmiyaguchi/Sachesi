@@ -796,6 +796,16 @@ bool InstallNet::checkLogin() {
         return false;
 
     if (!_completed) {
+        // Clear any stale cookies before re-requesting a challenge. The
+        // discovery probe also hits /cgi-bin/login.cgi, which leaves a
+        // loginsession cookie in the jar. BB10 returns
+        // <Status>Error</Status>/<ErrorDescription>SysErr</ErrorDescription>
+        // on a fresh login.cgi GET if the request carries a cookie from
+        // a prior session — the new challenge needs a clean jar so the
+        // device issues a fresh loginsession + session_id that the next
+        // challenge_data POST can bind to.
+        if (cookieJar)
+            cookieJar->setAllCookies(QList<QNetworkCookie>());
         getQuery(QString("login.cgi?request_version=%1").arg(QString::number(device->protocol)), "x-www-form-urlencoded");
         return false;
     }
@@ -874,21 +884,15 @@ void InstallNet::determineDeviceFamily()
 // that errored mid-stream (BB10 closes TLS without close_notify).
 void InstallNet::harvestCookies(QNetworkReply* r)
 {
-    if (!r || !cookieJar) {
-        qDebug() << "harvestCookies: r=" << r << " cookieJar=" << cookieJar;
+    if (!r || !cookieJar)
         return;
-    }
     QUrl url = r->url();
-    int harvested = 0;
     foreach (const QNetworkReply::RawHeaderPair& h, r->rawHeaderPairs()) {
         if (h.first.toLower() != "set-cookie")
             continue;
         QList<QNetworkCookie> cookies = QNetworkCookie::parseCookies(h.second);
         cookieJar->setCookiesFromUrl(cookies, url);
-        harvested += cookies.size();
     }
-    qDebug() << "harvestCookies: url=" << url.toString() << " harvested=" << harvested
-             << " jar now has=" << cookieJar->cookiesForUrl(url).size() << " for this URL";
 }
 
 void InstallNet::restoreReply()
@@ -898,9 +902,9 @@ void InstallNet::restoreReply()
 
     harvestCookies(reply);
     QByteArray data = reply->readAll();
-    qDebug() << "restoreReply: url=" << reply->url().toString()
-             << " bytes=" << data.size()
-             << " bodyHead=" << QString(data).simplified().left(300);
+#if DEBUG_LOG
+    for (int s = 0; s < data.size(); s+=3500) qDebug() << "Message:\n" << QString(data).simplified().mid(s, 3500);
+#endif
     if (data.size() == 0) {
         if (_restoring) {
             QMessageBox::information(nullptr, "Restore Error", "There was an error loading the backup file.\nThe device encountered an unrecoverable bug.\nIt is not designed to restore this backup.");
